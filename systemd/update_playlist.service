@@ -1,0 +1,10 @@
+[Unit]
+Description=Update Playlist Script
+After=network.target
+
+[Service]
+Type=simple
+User=myuser
+ExecStart=/usr/bin/python3 /path/to/repo/update_playlist/update_playlist.py
+WorkingDirectory=/path/to/repo/update_playlist
+Restart=on-failure
