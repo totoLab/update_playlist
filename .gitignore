@@ -1,3 +1,18 @@
-env
-__pycache__
-*.config
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.env
+.venv
+
+# Build artifacts
+build/
+dist/
+*.egg-info
+
+# IDEs
+.vscode/
+.idea/
