@@ -1,28 +1,66 @@
 # Update Playlist
-Utility to manage playlist in subfolders, regurarly downloading new songs from a Spotify playlist. Using with Navidrome.
 
-## Requirements & Usage
+A modular playlist manager to download and manage Spotify playlists.
 
-Since I have an externally managed python environment I setup dependencies in a virtual environment located in same base folder specified in the config file:
+## Installation
 
-``` sh
-base/
-    playlist1/
-    playlist2/
-    e/ # virtual env
+Install the package from PyPI:
+
+```bash
+pip install update-playlist
 ```
 
-To create one and install dependencies in $BASE_DIRECTORY (define it yourself):
-```
-cd $BASE_DIRECTORY && python -m venv e && source e/bin/activate && pip install spotdl ffmpeg yt-dlp
-```
+## Usage
 
-## Automation
+1.  **Configuration**
 
-In `systemd` I put a template of service + timer to automate running the script in the background. Configure and then run:
-```
-cp systemd/update_playlist.service /etc/systemd/system/update_playlist.service && 
-cp systemd/update_playlist.timer /etc/systemd/system/update_playlist.timer &&
-systemd daemon-reload &&
-systemd enable --now update_playlist.timer
+    The first time you run `update-playlist`, it will create a default configuration file at `~/.config/update_playlist/playlist.config`. You need to edit this file to configure your playlists.
+
+    ```ini
+    # Playlist Manager Configuration
+
+    # Base directory where playlists are stored
+    [base]
+    ~/Music/playlists
+
+    # List of playlist folders to manage
+    [playlists]
+    # Add your playlist folder names here
+    # Example:
+    # my-favorite-songs
+    # rock-classics
+
+    # Spotify API credentials (optional but recommended)
+    # Get them from: https://developer.spotify.com/dashboard/applications
+    [spotify]
+    # client_id=your_client_id_here
+    # client_secret=your_client_secret_here
+    # audio_format=mp3
+    # audio_quality=best
+    ```
+
+2.  **Sync Playlists**
+
+    To sync all your playlists, run:
+
+    ```bash
+    update-playlist
+    ```
+
+3.  **Add a new playlist**
+
+    You can add a new playlist using the `--add-playlist` option:
+
+    ```bash
+    update-playlist --add-playlist <SPOTIFY_URL> <PLAYLIST_NAME>
+    ```
+
+## Development
+
+To install the project in editable mode:
+
+```bash
+git clone https://github.com/your-username/update-playlist.git
+cd update-playlist
+pip install -e .
 ```
