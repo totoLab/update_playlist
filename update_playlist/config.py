@@ -65,6 +65,20 @@ class ConfigManager:
 
         return config_data
 
+    def _parse_playlist_line(self, line: str) -> tuple[str, Optional[str]]:
+        """Parse a playlist line that may contain a name and optional URL"""
+        parts = line.split(' ', 1)
+        name = parts[0].strip()
+        url = parts[1].strip() if len(parts) > 1 else None
+        
+        # Basic URL validation - check if it looks like a URL
+        if url and not (url.startswith('http://') or url.startswith('https://')):
+            # If the second part doesn't look like a URL, treat the whole line as the name
+            name = line.strip()
+            url = None
+            
+        return name, url
+
     def _build_app_config(self, config_data: Dict[str, List[str]]) -> AppConfig:
         """Build AppConfig from parsed data"""
         # Validate required sections
@@ -81,14 +95,17 @@ class ConfigManager:
 
         # Parse playlists
         playlists = []
-        for playlist_name in config_data['playlists']:
-            if not playlist_name.strip():
+        for playlist_line in config_data['playlists']:
+            if not playlist_line.strip():
                 continue
 
+            playlist_name, spotify_url = self._parse_playlist_line(playlist_line)
             folder_path = base_path / playlist_name
+            
             playlists.append(PlaylistConfig(
                 name=playlist_name,
-                folder_path=folder_path
+                folder_path=folder_path,
+                spotify_url=spotify_url
             ))
 
         # Parse Spotify credentials
@@ -132,11 +149,13 @@ class ConfigManager:
 ~/Music/playlists
 
 # List of playlist folders to manage
+# Format: playlist_name [optional_spotify_url]
 [playlists]
 # Add your playlist folder names here
-# Example:
+# Examples:
 # my-favorite-songs
-# rock-classics
+# rock-classics https://open.spotify.com/playlist/4uV...
+# jazz-collection https://open.spotify.com/playlist/37i...
 
 # Spotify API credentials (optional but recommended)
 # Get them from: https://developer.spotify.com/dashboard/applications

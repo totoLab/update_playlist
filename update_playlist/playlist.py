@@ -217,7 +217,7 @@ class PlaylistManager:
             if success:
                 # Add to config file
                 with self.config_path.open('a', encoding='utf-8') as f:
-                    f.write(f'{playlist_name}\n')
+                    f.write(f'{playlist_name} {spotify_url}\n')
                 self.logger.info(f"Added {playlist_name} to configuration")
 
             return success
