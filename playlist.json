@@ -1,0 +1,22 @@
+{
+    "base_path": "~/Music/playlists",
+    "playlists": [
+        {
+            "name": "my-favorite-songs"
+        },
+        {
+            "name": "rock-classics",
+            "spotify_url": "https://open.spotify.com/playlist/4uV..."
+        },
+        {
+            "name": "jazz-collection",
+            "spotify_url": "https://open.spotify.com/playlist/37i..."
+        }
+    ],
+    "spotify": {
+        "client_id": "your_client_id_here",
+        "client_secret": "your_client_secret_here",
+        "audio_format": "mp3",
+        "audio_quality": "best"
+    }
+}
