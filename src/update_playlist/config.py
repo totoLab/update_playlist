@@ -1,4 +1,4 @@
-import re
+import json
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -36,70 +36,36 @@ class ConfigManager:
         if not config_path.exists():
             raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-        config_data = self._parse_config_file(config_path)
+        config_data = self._parse_json_file(config_path)
         return self._build_app_config(config_data)
 
-    def _parse_config_file(self, config_path: Path) -> Dict[str, List[str]]:
-        """Parse INI-style configuration file"""
-        config_data = {}
-        section_regex = re.compile(r'\[([a-zA-Z0-9_]+)\]')
-        current_section = None
-
+    def _parse_json_file(self, config_path: Path) -> Dict:
+        """Parse JSON configuration file"""
         with config_path.open('r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
+            return json.load(f)
 
-                if not line or line.startswith('#'):
-                    continue
-
-                section_match = section_regex.match(line)
-                if section_match:
-                    current_section = section_match.group(1)
-                    config_data.setdefault(current_section, [])
-                    continue
-
-                if current_section is None:
-                    raise ValueError(f"Content outside section at line {line_num}")
-
-                config_data[current_section].append(line)
-
-        return config_data
-
-    def _parse_playlist_line(self, line: str) -> tuple[str, Optional[str]]:
-        """Parse a playlist line that may contain a name and optional URL"""
-        parts = line.split(' ', 1)
-        name = parts[0].strip()
-        url = parts[1].strip() if len(parts) > 1 else None
-        
-        # Basic URL validation - check if it looks like a URL
-        if url and not (url.startswith('http://') or url.startswith('https://')):
-            # If the second part doesn't look like a URL, treat the whole line as the name
-            name = line.strip()
-            url = None
-            
-        return name, url
-
-    def _build_app_config(self, config_data: Dict[str, List[str]]) -> AppConfig:
+    def _build_app_config(self, config_data: Dict) -> AppConfig:
         """Build AppConfig from parsed data"""
         # Validate required sections
-        if 'base' not in config_data or not config_data['base']:
-            raise ValueError("Missing or empty 'base' section")
+        if 'base_path' not in config_data:
+            raise ValueError("Missing 'base_path' in config")
 
         if 'playlists' not in config_data:
-            raise ValueError("Missing 'playlists' section")
+            raise ValueError("Missing 'playlists' in config")
 
         # Parse base path
-        base_path = Path(config_data['base'][0]).expanduser().resolve()
+        base_path = Path(config_data['base_path']).expanduser().resolve()
         if not base_path.is_dir():
             raise ValueError(f"Base path is not a directory: {base_path}")
 
         # Parse playlists
         playlists = []
-        for playlist_line in config_data['playlists']:
-            if not playlist_line.strip():
-                continue
+        for playlist_data in config_data['playlists']:
+            if not isinstance(playlist_data, dict) or 'name' not in playlist_data:
+                raise ValueError("Invalid playlist configuration")
 
-            playlist_name, spotify_url = self._parse_playlist_line(playlist_line)
+            playlist_name = playlist_data['name']
+            spotify_url = playlist_data.get('spotify_url')
             folder_path = base_path / playlist_name
             
             playlists.append(PlaylistConfig(
@@ -109,25 +75,11 @@ class ConfigManager:
             ))
 
         # Parse Spotify credentials
-        spotify_config = config_data.get('spotify', [])
-        client_id = None
-        client_secret = None
-        audio_format = 'mp3'
-        audio_quality = 'best'
-
-        for line in spotify_config:
-            if '=' in line:
-                key, value = line.split('=', 1)
-                key, value = key.strip(), value.strip()
-
-                if key == 'client_id':
-                    client_id = value
-                elif key == 'client_secret':
-                    client_secret = value
-                elif key == 'audio_format':
-                    audio_format = value
-                elif key == 'audio_quality':
-                    audio_quality = value
+        spotify_config = config_data.get('spotify', {})
+        client_id = spotify_config.get('client_id')
+        client_secret = spotify_config.get('client_secret')
+        audio_format = spotify_config.get('audio_format', 'mp3')
+        audio_quality = spotify_config.get('audio_quality', 'best')
 
         return AppConfig(
             base_path=base_path,
@@ -142,29 +94,51 @@ class ConfigManager:
         """Create a default configuration file"""
         config_path.parent.mkdir(parents=True, exist_ok=True)
 
-        default_config = """# Playlist Manager Configuration
+        default_config = {
+            "base_path": "~/Music/playlists",
+            "playlists": [
+                {
+                    "name": "my-favorite-songs"
+                },
+                {
+                    "name": "rock-classics",
+                    "spotify_url": "https://open.spotify.com/playlist/4uV..."
+                },
+                {
+                    "name": "jazz-collection",
+                    "spotify_url": "https://open.spotify.com/playlist/37i..."
+                }
+            ],
+            "spotify": {
+                "client_id": "your_client_id_here",
+                "client_secret": "your_client_secret_here",
+                "audio_format": "mp3",
+                "audio_quality": "best"
+            }
+        }
 
-# Base directory where playlists are stored
-[base]
-~/Music/playlists
+        with config_path.open('w', encoding='utf-8') as f:
+            json.dump(default_config, f, indent=4)
 
-# List of playlist folders to manage
-# Format: playlist_name [optional_spotify_url]
-[playlists]
-# Add your playlist folder names here
-# Examples:
-# my-favorite-songs
-# rock-classics https://open.spotify.com/playlist/4uV...
-# jazz-collection https://open.spotify.com/playlist/37i...
-
-# Spotify API credentials (optional but recommended)
-# Get them from: https://developer.spotify.com/dashboard/applications
-[spotify]
-# client_id=your_client_id_here
-# client_secret=your_client_secret_here
-# audio_format=mp3
-# audio_quality=best
-"""
-
-        config_path.write_text(default_config, encoding='utf-8')
         self.logger.info(f"Created default config: {config_path}")
+
+    def get_config_path(self, config_arg: Optional[str] = None) -> Path:
+        """Determine the configuration file path"""
+        if config_arg:
+            return Path(config_arg)
+
+        # Default search paths
+        search_paths = [
+            Path('playlist.json'),
+            Path.home() / '.config/playlist_manager/config.json',
+            Path('/etc/playlist_manager/config.json')
+        ]
+
+        for path in search_paths:
+            if path.exists():
+                return path
+
+        # If no config found, create a default one in the current directory
+        default_path = Path('playlist.json')
+        self.create_default_config(default_path)
+        return default_path
