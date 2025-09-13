@@ -33,10 +33,10 @@ class FileManager:
             media_files = self.get_media_files(folder_path)
 
             with output_file.open('w', encoding='utf-8') as f:
-                f.write('#EXTM3U\\n')
+                f.write('#EXTM3U\n')
                 for media_file in media_files:
                     relative_path = media_file.relative_to(folder_path)
-                    f.write(f'{relative_path}\\n')
+                    f.write(f'{relative_path}\n')
 
             self.logger.info(f'M3U playlist created: {output_file} ({len(media_files)} files)')
             return output_file
