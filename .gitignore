@@ -20,3 +20,4 @@ dist/
 # Local config / data
 spotify.json
 *.log
+*.db
