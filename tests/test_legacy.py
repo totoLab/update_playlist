@@ -45,3 +45,15 @@ def test_garbage_file_does_not_block_startup(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, 'home', lambda: tmp_path)
     (tmp_path / 'playlist.json').write_text('{"playlists": [{"no_name": 1}]}')
     assert legacy.migrate(db.connect(':memory:'), tmp_path, tmp_path) == 0
+
+
+def test_old_cron_config_path(tmp_path, monkeypatch):
+    # cron used: update-playlist --config ~/.config/playlist_manager/config.json
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    cfg = tmp_path / '.config' / 'playlist_manager' / 'config.json'
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps({'base_path': str(tmp_path),
+                               'playlists': [{'name': 'a', 'spotify_url': 'https://open.spotify.com/playlist/a'}]}))
+    conn = db.connect(':memory:')
+    assert legacy.migrate(conn, tmp_path / 'data', tmp_path) == 1
+    assert [n for n, _ in db.list_all(conn)] == ['a']
