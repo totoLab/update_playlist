@@ -5,7 +5,7 @@ import logging
 import argparse
 from pathlib import Path
 
-from . import db
+from . import db, legacy
 from .sync import make_client, sync_playlist, write_m3u
 
 log = logging.getLogger('update_playlist')
@@ -57,7 +57,13 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> int:
     args = parse_args(argv)
     setup_logging(args.log_file, args.verbose)
-    conn = db.connect(str(Path(args.db).expanduser()))
+    db_path = Path(args.db).expanduser()
+    music_dir = Path(args.music_dir).expanduser()
+    new_db = not db_path.exists()
+    conn = db.connect(str(db_path))
+    if new_db:
+        # only on first start, so playlists removed later aren't re-imported
+        legacy.migrate(conn, db_path.parent, music_dir)
 
     if args.list:
         for name, url in db.list_all(conn):
@@ -80,7 +86,6 @@ def main(argv=None) -> int:
             return 1
         log.info('Added %s', name)
 
-    music_dir = Path(args.music_dir).expanduser()
     client = None if args.skip_sync else make_client(
         os.environ.get('SPOTIFY_CLIENT_ID'), os.environ.get('SPOTIFY_CLIENT_SECRET'),
         args.format, args.bitrate, args.force_resync)
