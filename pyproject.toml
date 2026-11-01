@@ -10,16 +10,14 @@ authors = [
 ]
 description = "A modular playlist manager to download and manage Spotify playlists."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "spotdl",
-    "yt-dlp",
-    "requests",
+    "spotdl>=4.2,<5",
 ]
 
 [project.urls]
