@@ -107,7 +107,8 @@ def migrate(conn: sqlite3.Connection, db_dir: Path, music_dir: Path) -> int:
                 log.warning('Not importing %s: %s', name, e)
 
         log.info('Imported playlists from legacy config %s', path)
-        if base and base_dir.resolve() != music_dir.resolve():
+        # compare by content, not path: in Docker MUSIC_DIR is always /music even when it's the old folder
+        if base and entries and not any((music_dir / name).is_dir() for name, _ in entries):
             log.warning('Legacy config downloaded to %s, now MUSIC_DIR is %s. To reuse the songs '
                         'already there, point MUSIC_DIR (in Docker: MUSIC_HOST_DIR) at %s',
                         base, music_dir, base)

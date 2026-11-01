@@ -57,3 +57,20 @@ def test_old_cron_config_path(tmp_path, monkeypatch):
     conn = db.connect(':memory:')
     assert legacy.migrate(conn, tmp_path / 'data', tmp_path) == 1
     assert [n for n, _ in db.list_all(conn)] == ['a']
+
+
+def test_folder_warning_only_when_old_songs_not_visible(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    data, music = tmp_path / 'data', tmp_path / 'music'
+    data.mkdir()
+    (data / 'playlist.json').write_text(json.dumps({
+        'base_path': '/home/someone/library/music',  # host path, as seen from inside Docker
+        'playlists': [{'name': 'p', 'spotify_url': 'https://open.spotify.com/playlist/p'}]}))
+
+    legacy.migrate(db.connect(':memory:'), data, music)
+    assert 'point MUSIC_DIR' in caplog.text
+
+    caplog.clear()
+    (music / 'p').mkdir(parents=True)  # old folder mounted at MUSIC_DIR
+    legacy.migrate(db.connect(':memory:'), data, music)
+    assert 'point MUSIC_DIR' not in caplog.text
