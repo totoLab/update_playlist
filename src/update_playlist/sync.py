@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from typing import Tuple
 
 from spotdl import Spotdl
 from spotdl.utils.config import DEFAULT_CONFIG
@@ -25,24 +26,24 @@ def make_client(client_id=None, client_secret=None, audio_format='mp3',
     )
 
 
-def sync_playlist(client: Spotdl, spotify_url: str, folder: Path) -> bool:
-    """Download missing songs of a Spotify URL into folder. True if every song is present."""
+def sync_playlist(client: Spotdl, spotify_url: str, folder: Path) -> Tuple[int, int]:
+    """Download missing songs of a Spotify URL into folder. Returns (songs present, songs in playlist)."""
     folder.mkdir(parents=True, exist_ok=True)
     client.downloader.settings['output'] = str(folder / '{artists} - {title}.{output-ext}')
 
     songs = client.search([spotify_url])
     if not songs:
         log.warning('No songs found for %s', spotify_url)
-        return False
+        return 0, 0
 
     results = client.download_songs(songs)
     present = sum(path is not None for _, path in results)
     log.info('%s: %d/%d songs present', folder.name, present, len(songs))
-    return present == len(songs)
+    return present, len(songs)
 
 
-def write_m3u(folder: Path) -> Path:
-    """Write <folder>/<folder>.m3u listing every media file, relative paths, sorted."""
+def write_m3u(folder: Path) -> int:
+    """Write <folder>/<folder>.m3u listing every media file, relative paths, sorted. Returns file count."""
     folder.mkdir(parents=True, exist_ok=True)
     files = sorted(p for p in folder.rglob('*')
                    if p.is_file() and p.suffix.lower() in MEDIA_EXTENSIONS)
@@ -50,4 +51,4 @@ def write_m3u(folder: Path) -> Path:
     lines = ['#EXTM3U', *(str(p.relative_to(folder)) for p in files)]
     output.write_text('\n'.join(lines) + '\n', encoding='utf-8')
     log.info('Wrote %s (%d files)', output, len(files))
-    return output
+    return len(files)
