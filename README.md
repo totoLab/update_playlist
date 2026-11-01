@@ -23,6 +23,12 @@ update-playlist                          # sync every playlist
 
 Songs already on disk are skipped. Other flags: `--skip-sync` (only rebuild `.m3u` files), `--force-resync` (re-download everything), `-v`.
 
+### Status page
+
+`update-playlist --web 39501` keeps running and serves a live status page on http://localhost:39501: overall health, each playlist's state and song counts, last and next run, the recent log, and a **Sync now** button. Combine with `--interval HOURS` for scheduled syncs too.
+
+The page has no authentication. It binds to `127.0.0.1` unless `WEB_HOST` says otherwise; in Docker it listens on all interfaces and compose publishes port 39501, so keep it on a trusted network.
+
 ### Upgrading from a config-file version
 
 When the database is first created, playlists are imported automatically from `playlist.config` or `playlist.json`, found in `~/.config/update_playlist/`, `~/.config/playlist_manager/config.json`, or next to the database. Both the old text format and the JSON format work. Playlists without a URL get theirs from the `.spotdl` file in their folder. This happens once; delete the database to import again.
@@ -40,6 +46,8 @@ Settings are taken from environment variables, or from the matching flag:
 | `AUDIO_FORMAT` | `--format` | `mp3` |
 | `AUDIO_BITRATE` | `--bitrate` | `auto` |
 | `UPDATE_PLAYLIST_LOG` | `--log-file` | `~/.cache/update_playlist/update_playlist.log` (empty = no log file) |
+| `WEB_PORT` | `--web` | off |
+| `WEB_HOST` | `--web-host` | `127.0.0.1` (`0.0.0.0` in Docker) |
 | `SPOTIFY_CLIENT_ID` | | spotDL's built-in credentials |
 | `SPOTIFY_CLIENT_SECRET` | | spotDL's built-in credentials |
 
@@ -49,7 +57,7 @@ Settings are taken from environment variables, or from the matching flag:
 cp .env.example .env        # optional: set MUSIC_HOST_DIR, Spotify credentials
 mkdir -p music data         # create them yourself so they're owned by you, not root
 docker compose run --rm update-playlist --add https://open.spotify.com/playlist/... rock-classics
-docker compose up -d        # keeps running, syncs every 24 hours
+docker compose up -d        # keeps running, syncs every 24 hours, status page on :39501
 ```
 
 Any CLI command works through `docker compose run --rm update-playlist ...` (e.g. `--list`, `--remove NAME`, or no arguments for a one-off sync). The database lives in `./data`. The container runs as UID 1000; if your user has a different UID, add `user: "UID:GID"` to `compose.yaml`.
