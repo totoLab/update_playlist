@@ -15,7 +15,10 @@ USER app
 
 ENV MUSIC_DIR=/music \
     UPDATE_PLAYLIST_DB=/data/playlists.db \
-    UPDATE_PLAYLIST_LOG=
+    UPDATE_PLAYLIST_LOG= \
+    WEB_HOST=0.0.0.0
+
+EXPOSE 39501
 
 VOLUME ["/music", "/data"]
 ENTRYPOINT ["update-playlist"]

@@ -1,12 +1,14 @@
 import os
 import sys
-import time
+import threading
 import logging
 import argparse
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import db, legacy
+from . import db, legacy, web
+from .web import Status, now
 from .sync import make_client, sync_playlist, write_m3u
 
 log = logging.getLogger('update_playlist')
@@ -52,6 +54,10 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--interval', type=float, metavar='HOURS',
                         help='Keep running and sync every HOURS hours')
+    parser.add_argument('--web', type=int, metavar='PORT', default=os.environ.get('WEB_PORT') or None,
+                        help='Keep running and serve a status page on PORT [WEB_PORT]')
+    parser.add_argument('--web-host', default=env('WEB_HOST', '127.0.0.1'),
+                        help='Address for the status page [WEB_HOST]')
     return parser.parse_args(argv)
 
 
@@ -95,35 +101,56 @@ def main(argv=None) -> int:
         os.environ.get('SPOTIFY_CLIENT_ID'), os.environ.get('SPOTIFY_CLIENT_SECRET'),
         args.format, args.bitrate, args.force_resync)
 
+    status = Status()
     if args.add:
-        return sync_all(client, [(name, url)], music_dir)
+        return sync_all(client, [(name, url)], music_dir, status)
+
+    trigger = threading.Event()  # set by the status page's "Sync now" button
+    if args.web:
+        web.start(args.web_host, args.web, status, trigger)
+
     while True:
         # re-read the DB each run so playlists added meanwhile are picked up
-        status = sync_all(client, db.list_all(conn), music_dir)
-        if not args.interval:
-            return status
-        log.info('Next sync in %g hours', args.interval)
-        time.sleep(args.interval * 3600)
+        result = sync_all(client, db.list_all(conn), music_dir, status)
+        if not args.interval and not args.web:
+            return result
+        timeout = args.interval * 3600 if args.interval else None
+        if timeout:
+            next_run = datetime.now(timezone.utc) + timedelta(seconds=timeout)
+            status.update(next_run=next_run.isoformat(timespec='seconds'))
+            log.info('Next sync in %g hours', args.interval)
+        trigger.wait(timeout)
+        trigger.clear()
 
 
-def sync_all(client, playlists, music_dir: Path) -> int:
+def sync_all(client, playlists, music_dir: Path, status: Status) -> int:
+    status.reset_playlists(playlists)
+    status.update(running=True, current=None, started=now(), next_run=None)
     if not playlists:
         log.info('No playlists yet. Add one with --add SPOTIFY_URL NAME')
-        return 0
 
-    ok = 0
+    failed = 0
     for name, url in playlists:
         folder = music_dir / name
+        status.update(current=name)
+        status.playlist(name, state='syncing', error=None)
         try:
-            if client and not sync_playlist(client, url, folder):
-                log.warning('Sync incomplete for %s', name)
-            write_m3u(folder)
-            ok += 1
-        except Exception:
+            present = total = None
+            if client:
+                present, total = sync_playlist(client, url, folder)
+                if present < total or not total:
+                    log.warning('Sync incomplete for %s', name)
+            files = write_m3u(folder)
+            state = 'ok' if present == total and total != 0 else 'incomplete'
+            status.playlist(name, state=state, present=present, total=total, files=files, synced=now())
+        except Exception as e:
+            failed += 1
             log.exception('Failed to process %s', name)
+            status.playlist(name, state='error', error=str(e) or type(e).__name__)
 
-    log.info('Processed %d/%d playlists', ok, len(playlists))
-    return 0 if ok == len(playlists) else 1
+    status.update(running=False, current=None, finished=now(), failed=failed)
+    log.info('Processed %d/%d playlists', len(playlists) - failed, len(playlists))
+    return 1 if failed else 0
 
 
 if __name__ == '__main__':

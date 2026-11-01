@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>update-playlist</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #16181d; --muted: #646b78; --border: #e3e6eb;
+    --ok: #1a7f4b; --ok-bg: #e5f5ec; --warn: #9a6200; --warn-bg: #fdf3dc;
+    --err: #c0362c; --err-bg: #fce8e6; --run: #2257c9; --run-bg: #e6eefc; --on-run: #fff; --idle-bg: #eef0f3;
+    --log-bg: #11141a; --log-text: #d6dae1;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #171a21; --text: #e7e9ee; --muted: #9098a6; --border: #262b35;
+      --ok: #4cc38a; --ok-bg: #12291e; --warn: #e5a93a; --warn-bg: #2d2412;
+      --err: #f0776c; --err-bg: #331816; --run: #7aa2ff; --run-bg: #162140; --on-run: #0b1020; --idle-bg: #1f232c;
+      --log-bg: #0a0c10; --log-text: #c9ced8;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--muted);
+       text-transform: uppercase; letter-spacing: 0.04em; }
+  .conn { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .conn.live .dot { background: var(--ok); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+
+  .summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;
+             border-left: 4px solid var(--muted); }
+  .summary[data-tone=ok] { border-left-color: var(--ok); }
+  .summary[data-tone=warn] { border-left-color: var(--warn); }
+  .summary[data-tone=err] { border-left-color: var(--err); }
+  .summary[data-tone=run] { border-left-color: var(--run); }
+  .headline { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; margin: 0 0 4px; }
+  .meta { color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 20px; }
+  .meta b { color: var(--text); font-weight: 500; }
+  button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 8px; border: 0;
+           background: var(--run); color: var(--on-run); cursor: pointer; transition: opacity .15s, transform .1s; }
+  button:hover:not(:disabled) { opacity: .9; }
+  button:active:not(:disabled) { transform: scale(.97); }
+  button:disabled { opacity: .45; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--run); outline-offset: 2px; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { font-size: 12px; font-weight: 500; color: var(--muted); }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; }
+  td a { color: inherit; text-decoration: none; font-weight: 500; }
+  td a:hover { text-decoration: underline; }
+  .err-msg { color: var(--err); font-size: 12px; white-space: normal; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px;
+           background: var(--idle-bg); color: var(--muted); }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .badge.incomplete { background: var(--warn-bg); color: var(--warn); }
+  .badge.error { background: var(--err-bg); color: var(--err); }
+  .badge.syncing { background: var(--run-bg); color: var(--run); }
+  .empty { color: var(--muted); padding: 8px 0; }
+
+  pre { margin: 0; background: var(--log-bg); color: var(--log-text); border-radius: 8px; padding: 12px 14px;
+        font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+  .lvl-WARNING { color: #e5a93a; } .lvl-ERROR, .lvl-CRITICAL { color: #f0776c; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>update-playlist</h1>
+    <div class="conn" id="conn"><span class="dot"></span><span id="conn-text">Connecting…</span></div>
+  </header>
+
+  <section class="card summary" id="summary" data-tone="idle" aria-live="polite">
+    <div>
+      <p class="headline" id="headline">Connecting…</p>
+      <div class="meta">
+        <span>Last run <b id="last-run">—</b></span>
+        <span>Next run <b id="next-run">—</b></span>
+      </div>
+    </div>
+    <button id="sync" disabled>Sync now</button>
+  </section>
+
+  <section class="card">
+    <h2>Playlists</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Status</th><th>Songs</th><th>Files</th><th>Last synced</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="no-playlists" hidden>No playlists yet. Add one with <code>--add SPOTIFY_URL NAME</code>.</p>
+  </section>
+
+  <section class="card">
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let ws, state = null, retry = 0, clockSkew = 0;
+
+function ago(iso) {
+  if (!iso) return '—';
+  const s = Math.round((Date.now() + clockSkew - Date.parse(iso)) / 1000);
+  const abs = Math.abs(s), fut = s < 0;
+  const v = abs < 60 ? `${abs}s` : abs < 3600 ? `${Math.round(abs / 60)}m` : abs < 86400 ? `${Math.round(abs / 3600)}h` : `${Math.round(abs / 86400)}d`;
+  return fut ? `in ${v}` : `${v} ago`;
+}
+
+function summarize(s) {
+  const pls = Object.values(s.playlists);
+  if (s.running) return ['run', s.current ? `Syncing ${s.current}…` : 'Syncing…'];
+  const errors = pls.filter(p => p.state === 'error').length;
+  if (errors) return ['err', `${errors} playlist${errors > 1 ? 's' : ''} failed`];
+  if (!s.finished) return ['idle', 'Waiting for the first sync'];
+  const missing = pls.reduce((n, p) => n + (p.state === 'incomplete' ? (p.total || 0) - (p.present || 0) : 0), 0);
+  if (missing) return ['warn', `All synced, ${missing} song${missing > 1 ? 's' : ''} unavailable`];
+  return ['ok', 'Everything is in sync'];
+}
+
+function cell(tr, text, cls) {
+  const td = tr.insertCell();
+  if (cls) td.className = cls;
+  if (text instanceof Node) td.append(text); else td.textContent = text;
+  return td;
+}
+
+function render() {
+  const s = state;
+  if (!s) return;
+  const [tone, headline] = summarize(s);
+  $('summary').dataset.tone = tone;
+  $('headline').textContent = headline;
+  $('last-run').textContent = s.running ? `started ${ago(s.started)}` : ago(s.finished);
+  $('next-run').textContent = s.running ? '—' : s.next_run ? ago(s.next_run) : 'manual only';
+  $('sync').disabled = s.running || ws?.readyState !== WebSocket.OPEN;
+  $('sync').textContent = s.running ? 'Syncing…' : 'Sync now';
+
+  const rows = $('rows'), names = Object.keys(s.playlists).sort();
+  rows.replaceChildren();
+  $('no-playlists').hidden = names.length > 0;
+  for (const name of names) {
+    const p = s.playlists[name], tr = rows.insertRow();
+    const a = Object.assign(document.createElement('a'), { href: p.url || '#', target: '_blank', rel: 'noopener', textContent: name });
+    cell(tr, a);
+    const statusTd = cell(tr, Object.assign(document.createElement('span'), { className: `badge ${p.state || ''}`, textContent: p.state || 'pending' }));
+    if (p.error) statusTd.append(Object.assign(document.createElement('div'), { className: 'err-msg', textContent: p.error }));
+    cell(tr, p.total != null ? `${p.present} / ${p.total}` : '—', 'num');
+    cell(tr, p.files != null ? p.files : '—', 'num');
+    cell(tr, ago(p.synced));
+  }
+
+  const log = $('log'), atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+  log.replaceChildren(...s.log.map(line => {
+    const span = document.createElement('span');
+    span.className = 'lvl-' + (line.split(' ')[2] || '');
+    span.textContent = line + '\n';
+    return span;
+  }));
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+function setConn(live, text) {
+  $('conn').classList.toggle('live', live);
+  $('conn-text').textContent = text;
+}
+
+function connect() {
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  ws.onopen = () => { retry = 0; setConn(true, 'Live'); render(); };
+  ws.onmessage = e => {
+    state = JSON.parse(e.data);
+    clockSkew = Date.parse(state.now) - Date.now();
+    render();
+  };
+  ws.onclose = () => {
+    const delay = Math.min(30, 2 ** retry++);
+    setConn(false, `Disconnected, retrying in ${delay}s`);
+    $('sync').disabled = true;
+    setTimeout(connect, delay * 1000);
+  };
+}
+
+$('sync').onclick = () => {
+  ws.send(JSON.stringify({ action: 'sync' }));
+  $('sync').disabled = true;  // re-enabled by the next state update
+};
+setInterval(render, 15000);  // keep relative times fresh
+connect();
+</script>
+</body>
+</html>

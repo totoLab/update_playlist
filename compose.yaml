@@ -9,5 +9,7 @@ services:
     volumes:
       - ${MUSIC_HOST_DIR:-./music}:/music
       - ./data:/data
-    command: ["--interval", "24"]
+    command: ["--interval", "24", "--web", "39501"]
+    ports:
+      - "39501:39501"  # status page, no auth: keep it on a trusted network
     restart: unless-stopped
