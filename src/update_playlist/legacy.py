@@ -23,7 +23,10 @@ Entries = List[Tuple[str, Optional[str]]]
 def candidates(db_dir: Path) -> List[Path]:
     # db_dir covers Docker, where ~/.config isn't mounted: drop the old file next to the DB
     dirs = [Path.home() / '.config' / 'update_playlist', db_dir]
-    return [d / n for d in dirs for n in FILE_NAMES]
+    paths = [d / n for d in dirs for n in FILE_NAMES]
+    # used by cron setups: update-playlist --config ~/.config/playlist_manager/config.json
+    paths.append(Path.home() / '.config' / 'playlist_manager' / 'config.json')
+    return paths
 
 
 def parse(text: str) -> Tuple[Optional[str], Entries]:

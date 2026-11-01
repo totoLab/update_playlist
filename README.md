@@ -25,7 +25,7 @@ Songs already on disk are skipped. Other flags: `--skip-sync` (only rebuild `.m3
 
 ### Upgrading from a config-file version
 
-When the database is first created, playlists are imported automatically from `playlist.config` or `playlist.json`, found either in `~/.config/update_playlist/` or next to the database. Both the old text format and the JSON format work. Playlists without a URL get theirs from the `.spotdl` file in their folder. This happens once; delete the database to import again.
+When the database is first created, playlists are imported automatically from `playlist.config` or `playlist.json`, found in `~/.config/update_playlist/`, `~/.config/playlist_manager/config.json`, or next to the database. Both the old text format and the JSON format work. Playlists without a URL get theirs from the `.spotdl` file in their folder. This happens once; delete the database to import again.
 
 With Docker, copy the old file into `./data/` before the first run, and set `MUSIC_HOST_DIR` to your old music folder so songs you already have aren't downloaded again.
 
