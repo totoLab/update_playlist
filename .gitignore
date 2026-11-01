@@ -21,3 +21,6 @@ dist/
 spotify.json
 *.log
 *.db
+.env
+music/
+data/

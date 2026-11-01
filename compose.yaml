@@ -1,0 +1,13 @@
+services:
+  update-playlist:
+    build: .
+    image: update-playlist
+    init: true  # python as PID 1 ignores SIGTERM; tini makes `docker compose down` stop it promptly
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ${MUSIC_HOST_DIR:-./music}:/music
+      - ./data:/data
+    command: ["--interval", "24"]
+    restart: unless-stopped

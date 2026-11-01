@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import logging
 import argparse
 from pathlib import Path
@@ -48,6 +49,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument('--skip-sync', '-s', action='store_true', help='Only rebuild M3U files')
     parser.add_argument('--force-resync', '-f', action='store_true', help='Re-download all songs')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
+    parser.add_argument('--interval', type=float, metavar='HOURS',
+                        help='Keep running and sync every HOURS hours')
     return parser.parse_args(argv)
 
 
@@ -76,17 +79,27 @@ def main(argv=None) -> int:
             log.error('%s', e)
             return 1
         log.info('Added %s', name)
-        playlists = [(name, url)]
-    else:
-        playlists = db.list_all(conn)
-        if not playlists:
-            log.info('No playlists yet. Add one with --add SPOTIFY_URL NAME')
-            return 0
 
     music_dir = Path(args.music_dir).expanduser()
     client = None if args.skip_sync else make_client(
         os.environ.get('SPOTIFY_CLIENT_ID'), os.environ.get('SPOTIFY_CLIENT_SECRET'),
         args.format, args.bitrate, args.force_resync)
+
+    if args.add:
+        return sync_all(client, [(name, url)], music_dir)
+    while True:
+        # re-read the DB each run so playlists added meanwhile are picked up
+        status = sync_all(client, db.list_all(conn), music_dir)
+        if not args.interval:
+            return status
+        log.info('Next sync in %g hours', args.interval)
+        time.sleep(args.interval * 3600)
+
+
+def sync_all(client, playlists, music_dir: Path) -> int:
+    if not playlists:
+        log.info('No playlists yet. Add one with --add SPOTIFY_URL NAME')
+        return 0
 
     ok = 0
     for name, url in playlists:

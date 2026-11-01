@@ -37,6 +37,17 @@ Settings are taken from environment variables, or from the matching flag:
 | `SPOTIFY_CLIENT_ID` | | spotDL's built-in credentials |
 | `SPOTIFY_CLIENT_SECRET` | | spotDL's built-in credentials |
 
+## Docker
+
+```bash
+cp .env.example .env        # optional: set MUSIC_HOST_DIR, Spotify credentials
+mkdir -p music data         # create them yourself so they're owned by you, not root
+docker compose run --rm update-playlist --add https://open.spotify.com/playlist/... rock-classics
+docker compose up -d        # keeps running, syncs every 24 hours
+```
+
+Any CLI command works through `docker compose run --rm update-playlist ...` (e.g. `--list`, `--remove NAME`, or no arguments for a one-off sync). The database lives in `./data`. The container runs as UID 1000; if your user has a different UID, add `user: "UID:GID"` to `compose.yaml`.
+
 ## Development
 
 ```bash
