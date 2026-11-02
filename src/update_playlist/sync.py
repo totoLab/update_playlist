@@ -3,6 +3,7 @@ from pathlib import Path
 
 from spotdl import Spotdl
 from spotdl.utils.config import DEFAULT_CONFIG
+from spotdl.utils.formatter import create_file_name
 
 log = logging.getLogger(__name__)
 
@@ -35,8 +36,18 @@ def sync_playlist(client: Spotdl, spotify_url: str, folder: Path) -> bool:
         log.warning('No songs found for %s', spotify_url)
         return False
 
-    results = client.download_songs(songs)
-    present = sum(path is not None for _, path in results)
+    settings = client.downloader.settings
+    if settings['overwrite'] == 'skip':
+        # spotdl re-fetches each song's metadata from Spotify before checking the file; check first
+        todo = [s for s in songs if not create_file_name(
+            song=s, template=settings['output'], file_extension=settings['format'],
+            restrict=settings['restrict'], file_name_length=settings['max_filename_length']).exists()]
+    else:
+        todo = songs
+
+    present = len(songs) - len(todo)
+    if todo:
+        present += sum(path is not None for _, path in client.download_songs(todo))
     log.info('%s: %d/%d songs present', folder.name, present, len(songs))
     return present == len(songs)
 
