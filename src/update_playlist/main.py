@@ -3,6 +3,7 @@ import sys
 import time
 import logging
 import argparse
+import sqlite3
 from pathlib import Path
 
 from . import db, legacy
@@ -60,7 +61,11 @@ def main(argv=None) -> int:
     db_path = Path(args.db).expanduser()
     music_dir = Path(args.music_dir).expanduser()
     new_db = not db_path.exists()
-    conn = db.connect(str(db_path))
+    try:
+        conn = db.connect(str(db_path))
+    except (sqlite3.Error, OSError) as e:
+        log.error('Cannot open database %s: %s (is its folder writable by uid %d?)', db_path, e, os.getuid())
+        return 1
     if new_db:
         # only on first start, so playlists removed later aren't re-imported
         legacy.migrate(conn, db_path.parent, music_dir)
