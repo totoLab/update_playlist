@@ -67,6 +67,21 @@
   .badge.syncing { background: var(--run-bg); color: var(--run); }
   .empty { color: var(--muted); padding: 8px 0; }
 
+  .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .card-head h2 { margin: 0; }
+  button.ghost { background: var(--idle-bg); color: var(--text); padding: 6px 12px; }
+  dialog { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 12px;
+           padding: 20px; width: min(420px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(0, 0, 0, .5); }
+  dialog form { display: grid; gap: 12px; }
+  dialog h2 { margin: 0; }
+  label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  input { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
+          border-radius: 8px; padding: 8px 10px; }
+  input:focus-visible { outline: 2px solid var(--run); outline-offset: 1px; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  #add-error { margin: 0; color: var(--err); font-size: 12px; }
+
   pre { margin: 0; background: var(--log-bg); color: var(--log-text); border-radius: 8px; padding: 12px 14px;
         font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
@@ -92,14 +107,17 @@
   </section>
 
   <section class="card">
-    <h2>Playlists</h2>
+    <div class="card-head">
+      <h2>Playlists</h2>
+      <button class="ghost" id="add">Add playlist</button>
+    </div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Name</th><th>Status</th><th>Songs</th><th>Files</th><th>Last synced</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
-    <p class="empty" id="no-playlists" hidden>No playlists yet. Add one with <code>--add SPOTIFY_URL NAME</code>.</p>
+    <p class="empty" id="no-playlists" hidden>No playlists yet.</p>
   </section>
 
   <section class="card">
@@ -107,6 +125,23 @@
     <pre id="log"></pre>
   </section>
 </main>
+
+<dialog id="add-dialog">
+  <form id="add-form">
+    <h2>Add playlist</h2>
+    <label>Spotify URL
+      <input name="url" type="url" required placeholder="https://open.spotify.com/playlist/…">
+    </label>
+    <label>Name (becomes the folder name)
+      <input name="name" required>
+    </label>
+    <p id="add-error" hidden></p>
+    <div class="actions">
+      <button type="button" class="ghost" id="add-cancel">Cancel</button>
+      <button type="submit">Add and sync</button>
+    </div>
+  </form>
+</dialog>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -193,6 +228,29 @@ $('sync').onclick = () => {
   $('sync').disabled = true;  // re-enabled by the next state update
 };
 setInterval(render, 15000);  // keep relative times fresh
+
+const dialog = $('add-dialog'), form = $('add-form');
+$('add').onclick = () => { form.reset(); $('add-error').hidden = true; dialog.showModal(); };
+$('add-cancel').onclick = () => dialog.close();
+form.onsubmit = async e => {
+  e.preventDefault();
+  const submit = form.querySelector('[type=submit]');
+  submit.disabled = true;
+  try {
+    const res = await fetch('/playlists', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.fromEntries(new FormData(form))),
+    });
+    if (res.ok) return dialog.close();
+    const err = await res.json().catch(() => ({}));
+    $('add-error').textContent = typeof err.detail === 'string' ? err.detail : `Request failed (${res.status})`;
+  } catch {
+    $('add-error').textContent = 'Could not reach the server';
+  } finally {
+    submit.disabled = false;
+  }
+  $('add-error').hidden = false;
+};
 </script>
 </body>
 </html>

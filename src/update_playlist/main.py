@@ -107,7 +107,7 @@ def main(argv=None) -> int:
 
     trigger = threading.Event()  # set by the status page's "Sync now" button
     if args.web:
-        web.start(args.web_host, args.web, status, trigger)
+        web.start(args.web_host, args.web, status, trigger, str(db_path))
 
     while True:
         # re-read the DB each run so playlists added meanwhile are picked up

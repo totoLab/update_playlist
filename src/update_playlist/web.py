@@ -1,16 +1,20 @@
-"""Status page: live sync state pushed over Server-Sent Events, plus a button to start a sync."""
+"""Status page: live sync state pushed over Server-Sent Events, plus buttons to add a playlist and start a sync."""
 import asyncio
 import copy
 import json
 import logging
 import threading
 from collections import deque
+from contextlib import closing
 from datetime import datetime, timezone
 from importlib.resources import files
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel
+
+from . import db
 
 log = logging.getLogger(__name__)
 
@@ -85,7 +89,12 @@ class StatusLogHandler(logging.Handler):
         self.status.add_log(self.format(record))
 
 
-def make_app(status: Status, trigger: threading.Event) -> FastAPI:
+class NewPlaylist(BaseModel):
+    name: str
+    url: str
+
+
+def make_app(status: Status, trigger: threading.Event, db_path: str) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     page = files(__package__).joinpath('status.html').read_text(encoding='utf-8')
 
@@ -120,12 +129,24 @@ def make_app(status: Status, trigger: threading.Event) -> FastAPI:
             log.info('Manual sync requested from the status page')
             trigger.set()
 
+    @app.post('/playlists', status_code=201)
+    def add_playlist(body: NewPlaylist):
+        name, url = body.name.strip(), body.url.strip()
+        try:
+            with closing(db.connect(db_path)) as conn:  # sqlite connections can't cross threads
+                db.add(conn, name, url)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        log.info('Added %s from the status page', name)
+        status.playlist(name, state='pending', url=url)
+        trigger.set()  # if a sync is running, one more run follows it
+
     return app
 
 
-def start(host: str, port: int, status: Status, trigger: threading.Event) -> None:
+def start(host: str, port: int, status: Status, trigger: threading.Event, db_path: str) -> None:
     """Serve the status page from a daemon thread; the sync loop keeps the main thread."""
     logging.getLogger().addHandler(StatusLogHandler(status))
-    config = uvicorn.Config(make_app(status, trigger), host=host, port=port, log_level='warning')
+    config = uvicorn.Config(make_app(status, trigger, db_path), host=host, port=port, log_level='warning')
     threading.Thread(target=uvicorn.Server(config).run, daemon=True, name='status-page').start()
     log.info('Status page on http://%s:%d', host, port)
