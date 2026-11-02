@@ -3,6 +3,8 @@ from pathlib import Path
 
 from spotdl import Spotdl
 from spotdl.utils.config import DEFAULT_CONFIG
+from spotdl.utils.formatter import create_file_name
+from spotdl.utils.search import get_simple_songs
 
 log = logging.getLogger(__name__)
 
@@ -30,13 +32,25 @@ def sync_playlist(client: Spotdl, spotify_url: str, folder: Path) -> bool:
     folder.mkdir(parents=True, exist_ok=True)
     client.downloader.settings['output'] = str(folder / '{artists} - {title}.{output-ext}')
 
-    songs = client.search([spotify_url])
+    settings = client.downloader.settings
+    # Spotdl.search() re-fetches every song from Spotify (~3s each); download_songs does it only for missing ones
+    songs = get_simple_songs(
+        [spotify_url], use_ytm_data=settings['ytm_data'], playlist_numbering=settings['playlist_numbering'],
+        album_type=settings['album_type'], playlist_retain_track_cover=settings['playlist_retain_track_cover'])
     if not songs:
         log.warning('No songs found for %s', spotify_url)
         return False
 
-    results = client.download_songs(songs)
-    present = sum(path is not None for _, path in results)
+    if settings['overwrite'] == 'skip':
+        todo = [s for s in songs if not create_file_name(
+            song=s, template=settings['output'], file_extension=settings['format'],
+            restrict=settings['restrict'], file_name_length=settings['max_filename_length']).exists()]
+    else:
+        todo = songs
+
+    present = len(songs) - len(todo)
+    if todo:
+        present += sum(path is not None for _, path in client.download_songs(todo))
     log.info('%s: %d/%d songs present', folder.name, present, len(songs))
     return present == len(songs)
 
