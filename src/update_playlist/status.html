@@ -110,7 +110,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-let ws, state = null, retry = 0, clockSkew = 0;
+let es, state = null, clockSkew = 0;
 
 function ago(iso) {
   if (!iso) return '—';
@@ -146,7 +146,7 @@ function render() {
   $('headline').textContent = headline;
   $('last-run').textContent = s.running ? `started ${ago(s.started)}` : ago(s.finished);
   $('next-run').textContent = s.running ? '—' : s.next_run ? ago(s.next_run) : 'manual only';
-  $('sync').disabled = s.running || ws?.readyState !== WebSocket.OPEN;
+  $('sync').disabled = s.running || es?.readyState !== EventSource.OPEN;
   $('sync').textContent = s.running ? 'Syncing…' : 'Sync now';
 
   const rows = $('rows'), names = Object.keys(s.playlists).sort();
@@ -178,28 +178,21 @@ function setConn(live, text) {
   $('conn-text').textContent = text;
 }
 
-function connect() {
-  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => { retry = 0; setConn(true, 'Live'); render(); };
-  ws.onmessage = e => {
-    state = JSON.parse(e.data);
-    clockSkew = Date.parse(state.now) - Date.now();
-    render();
-  };
-  ws.onclose = () => {
-    const delay = Math.min(30, 2 ** retry++);
-    setConn(false, `Disconnected, retrying in ${delay}s`);
-    $('sync').disabled = true;
-    setTimeout(connect, delay * 1000);
-  };
-}
+// EventSource reconnects by itself
+es = new EventSource('/events');
+es.onopen = () => { setConn(true, 'Live'); render(); };
+es.onmessage = e => {
+  state = JSON.parse(e.data);
+  clockSkew = Date.parse(state.now) - Date.now();
+  render();
+};
+es.onerror = () => { setConn(false, 'Disconnected, retrying…'); $('sync').disabled = true; };
 
 $('sync').onclick = () => {
-  ws.send(JSON.stringify({ action: 'sync' }));
+  fetch('/sync', { method: 'POST' });
   $('sync').disabled = true;  // re-enabled by the next state update
 };
 setInterval(render, 15000);  // keep relative times fresh
-connect();
 </script>
 </body>
 </html>
