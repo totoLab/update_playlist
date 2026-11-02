@@ -1,53 +1,123 @@
+import os
 import sys
+import time
 import logging
 import argparse
+from pathlib import Path
 
-from .playlist import PlaylistManager
+from . import db
+from .sync import make_client, sync_playlist, write_m3u
+
+log = logging.getLogger('update_playlist')
 
 
-def main():
-    """Main entry point"""
+def env(name: str, default: str) -> str:
+    return os.environ.get(name) or default
 
-    parser = argparse.ArgumentParser(description="Modular Spotify Playlist Manager")
-    parser.add_argument('--config', '-c', help='Configuration file path')
-    parser.add_argument('--log-file', '-l', help='Log file path')
-    parser.add_argument('--skip-sync', '-s', action='store_true', help='Skip Spotify sync')
-    parser.add_argument('--force-resync', '-f', action='store_true', help='Force re-download all songs')
+
+def setup_logging(log_file: str, verbose: bool) -> None:
+    handlers = [logging.StreamHandler(sys.stdout)]
+    if log_file:
+        path = Path(log_file).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(path))
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format='%(asctime)s - %(levelname)s: %(message)s',
+        handlers=handlers,
+    )
+
+
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description='Download Spotify playlists and keep them in sync. '
+                    'Spotify credentials are read from SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET.')
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument('--add', nargs=2, metavar=('SPOTIFY_URL', 'NAME'), help='Add a playlist and sync it')
+    actions.add_argument('--remove', metavar='NAME', help='Remove a playlist (downloaded files are kept)')
+    actions.add_argument('--list', action='store_true', help='List playlists')
+
+    parser.add_argument('--db', default=env('UPDATE_PLAYLIST_DB', '~/.local/share/update_playlist/playlists.db'),
+                        help='SQLite database path [UPDATE_PLAYLIST_DB]')
+    parser.add_argument('--music-dir', default=env('MUSIC_DIR', '~/Music/playlists'),
+                        help='Folder where playlists are downloaded [MUSIC_DIR]')
+    parser.add_argument('--format', default=env('AUDIO_FORMAT', 'mp3'), help='Audio format [AUDIO_FORMAT]')
+    parser.add_argument('--bitrate', default=env('AUDIO_BITRATE', 'auto'),
+                        help='Bitrate, e.g. auto, 320k [AUDIO_BITRATE]')
+    parser.add_argument('--log-file', default=os.environ.get('UPDATE_PLAYLIST_LOG', '~/.cache/update_playlist/update_playlist.log'),
+                        help='Log file, empty to disable [UPDATE_PLAYLIST_LOG]')
+    parser.add_argument('--skip-sync', '-s', action='store_true', help='Only rebuild M3U files')
+    parser.add_argument('--force-resync', '-f', action='store_true', help='Re-download all songs')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
-    parser.add_argument('--add-playlist', nargs=2, metavar=('SPOTIFY_URL', 'NAME'),
-                       help='Add new playlist')
+    parser.add_argument('--interval', type=float, metavar='HOURS',
+                        help='Keep running and sync every HOURS hours')
+    return parser.parse_args(argv)
 
-    args = parser.parse_args()
 
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    setup_logging(args.log_file, args.verbose)
+    conn = db.connect(str(Path(args.db).expanduser()))
+
+    if args.list:
+        for name, url in db.list_all(conn):
+            print(f'{name}\t{url}')
+        return 0
+
+    if args.remove:
+        if db.remove(conn, args.remove):
+            log.info('Removed %s', args.remove)
+            return 0
+        log.error('No playlist named %s', args.remove)
+        return 1
+
+    if args.add:
+        url, name = args.add
+        try:
+            db.add(conn, name, url)
+        except ValueError as e:
+            log.error('%s', e)
+            return 1
+        log.info('Added %s', name)
+
+    music_dir = Path(args.music_dir).expanduser()
+    client = None if args.skip_sync else make_client(
+        os.environ.get('SPOTIFY_CLIENT_ID'), os.environ.get('SPOTIFY_CLIENT_SECRET'),
+        args.format, args.bitrate, args.force_resync)
+
+    if args.add:
+        return sync_all(client, [(name, url)], music_dir)
+    while True:
+        # re-read the DB each run so playlists added meanwhile are picked up
+        status = sync_all(client, db.list_all(conn), music_dir)
+        if not args.interval:
+            return status
+        log.info('Next sync in %g hours', args.interval)
+        time.sleep(args.interval * 3600)
+
+
+def sync_all(client, playlists, music_dir: Path) -> int:
+    if not playlists:
+        log.info('No playlists yet. Add one with --add SPOTIFY_URL NAME')
+        return 0
+
+    ok = 0
+    for name, url in playlists:
+        folder = music_dir / name
+        try:
+            if client and not sync_playlist(client, url, folder):
+                log.warning('Sync incomplete for %s', name)
+            write_m3u(folder)
+            ok += 1
+        except Exception:
+            log.exception('Failed to process %s', name)
+
+    log.info('Processed %d/%d playlists', ok, len(playlists))
+    return 0 if ok == len(playlists) else 1
+
+
+if __name__ == '__main__':
     try:
-        # Initialize manager
-        manager = PlaylistManager(args.config, args.log_file)
-
-        if args.verbose:
-            logging.getLogger().setLevel(logging.DEBUG)
-
-        manager.initialize()
-
-        # Handle adding new playlist
-        if args.add_playlist:
-            spotify_url, name = args.add_playlist
-            success = manager.add_playlist(spotify_url, name)
-            sys.exit(0 if success else 1)
-
-        # Check if config was just created
-        if not manager.config:
-            sys.exit(0)
-
-        # Sync all playlists
-        manager.sync_all_playlists(args.skip_sync, args.force_resync)
-
+        sys.exit(main())
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+        sys.exit(130)

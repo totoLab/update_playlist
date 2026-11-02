@@ -1,64 +1,58 @@
 # Update Playlist
 
-A modular playlist manager to download and manage Spotify playlists.
+Download Spotify playlists with [spotDL](https://github.com/spotDL/spotify-downloader) and keep them in sync. Each playlist gets its own folder and an `.m3u` file.
 
 ## Installation
-
-Install the package from PyPI:
 
 ```bash
 pip install update-playlist
 ```
 
+`ffmpeg` must be installed.
+
 ## Usage
 
-1.  **Configuration**
+Playlists are stored in a SQLite database.
 
-    The first time you run `update-playlist`, it will create a default configuration file at `~/.config/update_playlist/playlist.json`. You need to edit this file to configure your playlists.
+```bash
+update-playlist --add https://open.spotify.com/playlist/... rock-classics   # add and download
+update-playlist --list
+update-playlist --remove rock-classics   # downloaded files are kept
+update-playlist                          # sync every playlist
+```
 
-    ```json
-    {
-        "base_path": "~/Music/playlists",
-        "playlists": [
-            {
-                "name": "my-favorite-songs"
-            },
-            {
-                "name": "rock-classics",
-                "spotify_url": "https://open.spotify.com/playlist/4uV..."
-            }
-        ],
-        "spotify": {
-            "client_id": "your_client_id_here",
-            "client_secret": "your_client_secret_here",
-            "audio_format": "mp3",
-            "audio_quality": "best"
-        }
-    }
-    ```
+Songs already on disk are skipped. Other flags: `--skip-sync` (only rebuild `.m3u` files), `--force-resync` (re-download everything), `-v`.
 
-2.  **Sync Playlists**
+## Configuration
 
-    To sync all your playlists, run:
+Settings are taken from environment variables, or from the matching flag:
 
-    ```bash
-    update-playlist
-    ```
+| Variable | Flag | Default |
+|---|---|---|
+| `MUSIC_DIR` | `--music-dir` | `~/Music/playlists` |
+| `UPDATE_PLAYLIST_DB` | `--db` | `~/.local/share/update_playlist/playlists.db` |
+| `AUDIO_FORMAT` | `--format` | `mp3` |
+| `AUDIO_BITRATE` | `--bitrate` | `auto` |
+| `UPDATE_PLAYLIST_LOG` | `--log-file` | `~/.cache/update_playlist/update_playlist.log` (empty = no log file) |
+| `SPOTIFY_CLIENT_ID` | | spotDL's built-in credentials |
+| `SPOTIFY_CLIENT_SECRET` | | spotDL's built-in credentials |
 
-3.  **Add a new playlist**
+## Docker
 
-    You can add a new playlist using the `--add-playlist` option:
+```bash
+cp .env.example .env        # optional: set MUSIC_HOST_DIR, Spotify credentials
+mkdir -p music data         # create them yourself so they're owned by you, not root
+docker compose run --rm update-playlist --add https://open.spotify.com/playlist/... rock-classics
+docker compose up -d        # keeps running, syncs every 24 hours
+```
 
-    ```bash
-    update-playlist --add-playlist <SPOTIFY_URL> <PLAYLIST_NAME>
-    ```
+Any CLI command works through `docker compose run --rm update-playlist ...` (e.g. `--list`, `--remove NAME`, or no arguments for a one-off sync). The database lives in `./data`. The container runs as UID 1000; if your user has a different UID, add `user: "UID:GID"` to `compose.yaml`.
 
 ## Development
 
-To install the project in editable mode:
-
 ```bash
-git clone https://github.com/your-username/update-playlist.git
-cd update-playlist
-pip install -e .
+git clone https://github.com/totoLab/update_playlist.git
+cd update_playlist
+pip install -e . pytest
+pytest
 ```

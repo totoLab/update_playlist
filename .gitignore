@@ -16,3 +16,11 @@ dist/
 # IDEs
 .vscode/
 .idea/
+
+# Local config / data
+spotify.json
+*.log
+*.db
+.env
+music/
+data/
