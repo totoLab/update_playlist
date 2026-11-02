@@ -3,10 +3,9 @@ import sys
 import time
 import logging
 import argparse
-import sqlite3
 from pathlib import Path
 
-from . import db, legacy
+from . import db
 from .sync import make_client, sync_playlist, write_m3u
 
 log = logging.getLogger('update_playlist')
@@ -58,17 +57,7 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> int:
     args = parse_args(argv)
     setup_logging(args.log_file, args.verbose)
-    db_path = Path(args.db).expanduser()
-    music_dir = Path(args.music_dir).expanduser()
-    new_db = not db_path.exists()
-    try:
-        conn = db.connect(str(db_path))
-    except (sqlite3.Error, OSError) as e:
-        log.error('Cannot open database %s: %s (is its folder writable by uid %d?)', db_path, e, os.getuid())
-        return 1
-    if new_db:
-        # only on first start, so playlists removed later aren't re-imported
-        legacy.migrate(conn, db_path.parent, music_dir)
+    conn = db.connect(str(Path(args.db).expanduser()))
 
     if args.list:
         for name, url in db.list_all(conn):
@@ -91,6 +80,7 @@ def main(argv=None) -> int:
             return 1
         log.info('Added %s', name)
 
+    music_dir = Path(args.music_dir).expanduser()
     client = None if args.skip_sync else make_client(
         os.environ.get('SPOTIFY_CLIENT_ID'), os.environ.get('SPOTIFY_CLIENT_SECRET'),
         args.format, args.bitrate, args.force_resync)

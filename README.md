@@ -23,12 +23,6 @@ update-playlist                          # sync every playlist
 
 Songs already on disk are skipped. Other flags: `--skip-sync` (only rebuild `.m3u` files), `--force-resync` (re-download everything), `-v`.
 
-### Upgrading from a config-file version
-
-When the database is first created, playlists are imported automatically from `playlist.config` or `playlist.json`, found in `~/.config/update_playlist/`, `~/.config/playlist_manager/config.json`, or next to the database. Both the old text format and the JSON format work. Playlists without a URL get theirs from the `.spotdl` file in their folder. This happens once; delete the database to import again.
-
-With Docker, copy the old file into `./data/` before the first run, and set `MUSIC_HOST_DIR` to your old music folder so songs you already have aren't downloaded again.
-
 ## Configuration
 
 Settings are taken from environment variables, or from the matching flag:
