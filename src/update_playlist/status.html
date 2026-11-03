@@ -80,6 +80,8 @@
           border-radius: 8px; padding: 8px 10px; }
   input:focus-visible { outline: 2px solid var(--run); outline-offset: 1px; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .every { display: flex; align-items: center; gap: 6px; font-size: inherit; }
+  .every input { width: 5.5em; padding: 2px 6px; }
   #add-error { margin: 0; color: var(--err); font-size: 12px; }
 
   pre { margin: 0; background: var(--log-bg); color: var(--log-text); border-radius: 8px; padding: 12px 14px;
@@ -101,6 +103,9 @@
       <div class="meta">
         <span>Last run <b id="last-run">—</b></span>
         <span>Next run <b id="next-run">—</b></span>
+        <label class="every">Every
+          <input id="interval" type="number" min="0" max="8760" step="any" placeholder="—" aria-label="Hours between syncs, 0 for manual only">
+          hours</label>
       </div>
     </div>
     <button id="sync" disabled>Sync now</button>
@@ -181,6 +186,7 @@ function render() {
   $('headline').textContent = headline;
   $('last-run').textContent = s.running ? `started ${ago(s.started)}` : ago(s.finished);
   $('next-run').textContent = s.running ? '—' : s.next_run ? ago(s.next_run) : 'manual only';
+  if (document.activeElement !== $('interval')) $('interval').value = s.interval ?? 0;
   $('sync').disabled = s.running || es?.readyState !== EventSource.OPEN;
   $('sync').textContent = s.running ? 'Syncing…' : 'Sync now';
 
@@ -226,6 +232,11 @@ es.onerror = () => { setConn(false, 'Disconnected, retrying…'); $('sync').disa
 $('sync').onclick = () => {
   fetch('/sync', { method: 'POST' });
   $('sync').disabled = true;  // re-enabled by the next state update
+};
+$('interval').onchange = e => {
+  if (!e.target.checkValidity() || e.target.value === '') return render();
+  fetch('/interval', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({ hours: Number(e.target.value) }) });
 };
 setInterval(render, 15000);  // keep relative times fresh
 

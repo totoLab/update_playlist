@@ -25,7 +25,7 @@ Songs already on disk are skipped. Other flags: `--skip-sync` (only rebuild `.m3
 
 ### Status page
 
-`update-playlist --web 39501` keeps running and serves a live status page on http://localhost:39501: overall health, each playlist's state and song counts, last and next run, the recent log, and a **Sync now** button. Combine with `--interval HOURS` for scheduled syncs too.
+`update-playlist --web 39501` keeps running and serves a live status page on http://localhost:39501: overall health, each playlist's state and song counts, last and next run, the recent log, and a **Sync now** button. It syncs every 24 hours by default; change that on the page (0 = manual only) or with `--interval HOURS`. A value saved from the page takes precedence over `--interval` on later starts.
 
 The page has no authentication. It binds to `127.0.0.1` unless `WEB_HOST` says otherwise; in Docker it listens on all interfaces and compose publishes port 39501, so keep it on a trusted network.
 

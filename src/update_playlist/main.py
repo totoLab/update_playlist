@@ -4,7 +4,7 @@ import threading
 import logging
 import argparse
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import db, legacy, web
@@ -53,7 +53,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument('--force-resync', '-f', action='store_true', help='Re-download all songs')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--interval', type=float, metavar='HOURS',
-                        help='Keep running and sync every HOURS hours')
+                        help='Keep running and sync every HOURS hours (default with --web: 24). '
+                             'Once changed from the status page, the saved value wins')
     parser.add_argument('--web', type=int, metavar='PORT', default=os.environ.get('WEB_PORT') or None,
                         help='Keep running and serve a status page on PORT [WEB_PORT]')
     parser.add_argument('--web-host', default=env('WEB_HOST', '127.0.0.1'),
@@ -102,6 +103,12 @@ def main(argv=None) -> int:
         args.format, args.bitrate, args.force_resync)
 
     status = Status()
+    if args.interval is None and args.web:
+        args.interval = 24
+    saved = db.get_setting(conn, 'interval')
+    if saved is not None and float(saved) != (args.interval or 0):
+        log.info('Using sync interval %s hours saved from the status page', saved)
+    status.update(interval=float(saved) if saved is not None else args.interval or None)
     if args.add:
         return sync_all(client, [(name, url)], music_dir, status)
 
@@ -112,15 +119,20 @@ def main(argv=None) -> int:
     while True:
         # re-read the DB each run so playlists added meanwhile are picked up
         result = sync_all(client, db.list_all(conn), music_dir, status)
-        if not args.interval and not args.web:
+        interval = status.snapshot()['interval']
+        if not interval and not args.web:
             return result
-        timeout = args.interval * 3600 if args.interval else None
-        if timeout:
-            next_run = datetime.now(timezone.utc) + timedelta(seconds=timeout)
-            status.update(next_run=next_run.isoformat(timespec='seconds'))
-            log.info('Next sync in %g hours', args.interval)
-        trigger.wait(timeout)
+        status.update(next_run=web.next_run(interval))
+        if interval:
+            log.info('Next sync in %g hours', interval)
+        # ponytail: 1-minute tick so interval changes from the page apply without a second event
+        while not trigger.wait(60) and not due(status.snapshot()['next_run']):
+            pass
         trigger.clear()
+
+
+def due(next_run) -> bool:
+    return next_run is not None and datetime.fromisoformat(next_run) <= datetime.now(timezone.utc)
 
 
 def sync_all(client, playlists, music_dir: Path, status: Status) -> int:

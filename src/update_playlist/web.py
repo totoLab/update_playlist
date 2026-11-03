@@ -6,13 +6,14 @@ import logging
 import threading
 from collections import deque
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 from importlib.resources import files
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from . import db
 
@@ -21,6 +22,13 @@ log = logging.getLogger(__name__)
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec='seconds')
+
+
+def next_run(hours: Optional[float], since: Optional[str] = None) -> Optional[str]:
+    if not hours:
+        return None
+    start = datetime.fromisoformat(since) if since else datetime.now(timezone.utc)
+    return (start + timedelta(hours=hours)).isoformat(timespec='seconds')
 
 
 class Status:
@@ -37,6 +45,7 @@ class Status:
             'finished': None,
             'failed': 0,          # playlists that errored in the last run
             'next_run': None,
+            'interval': None,     # hours between syncs, None = manual only
             'playlists': {},      # name -> {url, state, present, total, files, synced, error}
         }
 
@@ -89,6 +98,10 @@ class StatusLogHandler(logging.Handler):
         self.status.add_log(self.format(record))
 
 
+class Interval(BaseModel):
+    hours: float = Field(ge=0, le=24 * 365)  # 0 = manual only
+
+
 class NewPlaylist(BaseModel):
     name: str
     url: str
@@ -128,6 +141,17 @@ def make_app(status: Status, trigger: threading.Event, db_path: str) -> FastAPI:
             status.update(running=True, current=None)  # show it at once, block double clicks
             log.info('Manual sync requested from the status page')
             trigger.set()
+
+    @app.put('/interval', status_code=204)
+    def set_interval(body: Interval):
+        hours = body.hours or None
+        with closing(db.connect(db_path)) as conn:
+            db.set_setting(conn, 'interval', str(body.hours))
+        s = status.snapshot()
+        # while running, the sync loop schedules the next run itself when it finishes
+        fields = {} if s['running'] else {'next_run': next_run(hours, s['finished'])}
+        status.update(interval=hours, **fields)
+        log.info('Sync interval set to %s from the status page', f'{hours:g} hours' if hours else 'manual only')
 
     @app.post('/playlists', status_code=201)
     def add_playlist(body: NewPlaylist):

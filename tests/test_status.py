@@ -50,3 +50,33 @@ def test_add_playlist_from_page(tmp_path):
     assert trigger.is_set() and status.snapshot()['playlists']['a']['state'] == 'pending'
     assert post('a') == 400
     assert post('../x') == 400
+
+
+def test_set_interval_from_page(tmp_path):
+    from update_playlist import db
+    with socket.socket() as s:
+        s.bind(('127.0.0.1', 0))
+        port = s.getsockname()[1]
+    status = Status()
+    status.update(finished='2026-01-01T00:00:00+00:00')
+    web.start('127.0.0.1', port, status, threading.Event(), str(tmp_path / 'p.db'))
+
+    def put(hours):
+        req = urllib.request.Request(f'http://127.0.0.1:{port}/interval', method='PUT',
+                                     data=json.dumps({'hours': hours}).encode(),
+                                     headers={'Content-Type': 'application/json'})
+        for _ in range(50):
+            try:
+                return urllib.request.urlopen(req).status
+            except urllib.error.HTTPError as e:
+                return e.code
+            except urllib.error.URLError:
+                time.sleep(0.1)
+
+    assert put(6) == 204
+    s = status.snapshot()
+    assert s['interval'] == 6 and s['next_run'] == '2026-01-01T06:00:00+00:00'
+    assert db.get_setting(db.connect(str(tmp_path / 'p.db')), 'interval') == '6.0'
+    assert put(0) == 204
+    assert status.snapshot()['interval'] is None and status.snapshot()['next_run'] is None
+    assert put(-1) == 422
