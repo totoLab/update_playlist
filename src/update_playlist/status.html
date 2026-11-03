@@ -80,8 +80,11 @@
           border-radius: 8px; padding: 8px 10px; }
   input:focus-visible { outline: 2px solid var(--run); outline-offset: 1px; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; }
-  .every { display: flex; align-items: center; gap: 6px; font-size: inherit; }
-  .every input { width: 5.5em; padding: 2px 6px; }
+  #interval { field-sizing: content; font: inherit; font-weight: 500; color: var(--text); border: 0; padding: 0 14px 0 0;
+              appearance: none; cursor: pointer;
+              background: no-repeat right center / 8px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23888'/%3E%3C/svg%3E"); }
+  #interval:focus-visible { outline: 2px solid var(--run); outline-offset: 2px; border-radius: 4px; }
+  #interval option { background: var(--card); color: var(--text); }
   #add-error { margin: 0; color: var(--err); font-size: 12px; }
 
   pre { margin: 0; background: var(--log-bg); color: var(--log-text); border-radius: 8px; padding: 12px 14px;
@@ -103,9 +106,11 @@
       <div class="meta">
         <span>Last run <b id="last-run">—</b></span>
         <span>Next run <b id="next-run">—</b></span>
-        <label class="every">Every
-          <input id="interval" type="number" min="0" max="8760" step="any" placeholder="—" aria-label="Hours between syncs, 0 for manual only">
-          hours</label>
+        <span>Sync <select id="interval" aria-label="Sync frequency">
+          <option value="0">manually only</option><option value="1">every hour</option>
+          <option value="6">every 6 hours</option><option value="12">every 12 hours</option>
+          <option value="24">every day</option><option value="168">every week</option>
+        </select></span>
       </div>
     </div>
     <button id="sync" disabled>Sync now</button>
@@ -186,7 +191,10 @@ function render() {
   $('headline').textContent = headline;
   $('last-run').textContent = s.running ? `started ${ago(s.started)}` : ago(s.finished);
   $('next-run').textContent = s.running ? '—' : s.next_run ? ago(s.next_run) : 'manual only';
-  if (document.activeElement !== $('interval')) $('interval').value = s.interval ?? 0;
+  const sel = $('interval'), hours = String(s.interval ?? 0);
+  if (![...sel.options].some(o => o.value === hours))  // a custom --interval
+    sel.add(new Option(`every ${s.interval} hours`, hours));
+  sel.value = hours;
   $('sync').disabled = s.running || es?.readyState !== EventSource.OPEN;
   $('sync').textContent = s.running ? 'Syncing…' : 'Sync now';
 
@@ -234,7 +242,6 @@ $('sync').onclick = () => {
   $('sync').disabled = true;  // re-enabled by the next state update
 };
 $('interval').onchange = e => {
-  if (!e.target.checkValidity() || e.target.value === '') return render();
   fetch('/interval', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
                        body: JSON.stringify({ hours: Number(e.target.value) }) });
 };
