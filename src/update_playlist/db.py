@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 
 def connect(path: str) -> sqlite3.Connection:
@@ -9,7 +9,18 @@ def connect(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.execute('CREATE TABLE IF NOT EXISTS playlists ('
                  'name TEXT PRIMARY KEY, spotify_url TEXT NOT NULL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
     return conn
+
+
+def get_setting(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    row = conn.execute('SELECT value FROM settings WHERE key = ?', (key,)).fetchone()
+    return row[0] if row else None
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    with conn:
+        conn.execute('INSERT OR REPLACE INTO settings VALUES (?, ?)', (key, value))
 
 
 def add(conn: sqlite3.Connection, name: str, spotify_url: str) -> None:

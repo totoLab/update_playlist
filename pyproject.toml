@@ -18,6 +18,9 @@ classifiers = [
 ]
 dependencies = [
     "spotdl>=4.2,<5",
+    # status page; already pulled in by spotdl, listed so we don't rely on that
+    "fastapi",
+    "uvicorn",
 ]
 
 [project.urls]
@@ -26,3 +29,6 @@ dependencies = [
 
 [project.scripts]
 update-playlist = "update_playlist.main:main"
+
+[tool.setuptools.package-data]
+update_playlist = ["*.html"]
